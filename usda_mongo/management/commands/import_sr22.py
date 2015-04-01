@@ -5,11 +5,8 @@ import os
 import zipfile
 
 from django.core.management.base import BaseCommand, CommandError
-# from django.db import transaction, DEFAULT_DB_ALIAS, reset_queries
 
-from usda_mongo.models import Food, FoodGroup, Weight, Nutrient, Footnote, \
-                        DataSource, DataDerivation, NutrientData, Source,\
-                        FOOTNOTE_DESC, FOOTNOTE_MEAS, FOOTNOTE_NUTR
+from usda_mongo.models import FOOTNOTE_DESC, FOOTNOTE_MEAS, FOOTNOTE_NUTR
 from mongoengine.context_managers import switch_db
 from .unicode_dict_reader import UnicodeDictReader
 
@@ -74,7 +71,7 @@ class Command(BaseCommand):
         parse_derivation = options.get('derivation')
         parse_source = options.get('source')
         parse_data = options.get('data')
-        encoding = options.get('encoding')
+        encoding = options.get('encoding', 'cp1252')
 
         if not os.path.exists(options['filename']):
             CommandError('%s does not exist' % options['filename'])
@@ -86,10 +83,10 @@ class Command(BaseCommand):
 
         logging.info('Verifying %s...' % options['filename'])
 
-        if not parse_all and not True in [
+        if not parse_all and not any([
             parse_group, parse_food, parse_weight, parse_nutrient, parse_footnote,
             parse_datasource, parse_derivation, parse_source, parse_data
-        ]:
+        ]):
             logging.info('Parsing all available data from %s' % options['filename'])
             parse_all = True
 
@@ -99,10 +96,6 @@ class Command(BaseCommand):
         missing_files = [required_file for required_file in required_files if required_file not in zip_file.namelist()]
         if missing_files:
             logging.error('%s does not appear to be a valid SR22 database.  Unable to extract %s' % (options['filename'], ', '.join(missing_files)))
-
-        #transaction.commit_unless_managed(using=using)
-        #transaction.enter_transaction_management(using=using)
-        #transaction.managed(True, using=using)
 
         if parse_all or parse_group:
             logging.info('Reading %s...' % FD_GROUP)
@@ -132,9 +125,6 @@ class Command(BaseCommand):
             logging.info('Reading %s...' % NUT_DATA)
             create_update_nutrient_data(''.join([byte for byte in zip_file.read(NUT_DATA)]).splitlines(), db_alias)
 
-        #transaction.commit(using=using)
-        #transaction.leave_transaction_management(using=using)
-
         zip_file.close()
 
 
@@ -143,6 +133,8 @@ def create_update_food_groups(data, db_alias):
     total_updated = 0
 
     logging.info('Processing %d food groups' % len(data))
+
+    from usda_mongo.models import FoodGroup
 
     with switch_db(FoodGroup, db_alias) as FoodGroup:
 
@@ -177,6 +169,8 @@ def create_update_foods(data, encoding, db_alias):
     total_updated = 0
 
     logging.info('Processing %d foods' % len(data))
+
+    from usda_mongo.models import Food, FoodGroup
 
     with switch_db(Food, db_alias) as Food:
         with switch_db(FoodGroup, db_alias) as FoodGroup:
@@ -239,6 +233,8 @@ def create_update_weights(data, db_alias):
 
     logging.info('Processing %d weights' % len(data))
 
+    from usda_mongo.models import Weight, Food
+
     with switch_db(Weight, db_alias) as Weight:
         with switch_db(Food, db_alias) as Food:
 
@@ -288,6 +284,8 @@ def create_update_nutrients(data, encoding, db_alias):
 
     logging.info('Processing %d nutrients' % len(data))
 
+    from usda_mongo.models import Nutrient
+
     with switch_db(Nutrient, db_alias) as Nutrient:
 
         for row in UnicodeDictReader(
@@ -328,6 +326,8 @@ def create_update_footnotes(data, db_alias):
     total_updated = 0
 
     logging.info('Processing %d footnotes' % len(data))
+
+    from usda_mongo.models import Footnote, Nutrient, Food
 
     with switch_db(Footnote, db_alias) as Footnote:
         with switch_db(Nutrient, db_alias) as Nutrient:
@@ -389,6 +389,8 @@ def create_update_data_sources(data, db_alias):
 
     logging.info('Processing %d data sources' % len(data))
 
+    from usda_mongo.models import DataSource
+
     with switch_db(DataSource, db_alias) as DataSource:
 
         for row in csv.DictReader(
@@ -436,6 +438,8 @@ def create_update_derivations(data, db_alias):
 
     logging.info('Processing %d data derivations' % len(data))
 
+    from usda_mongo.models import DataDerivation
+
     with switch_db(DataDerivation, db_alias) as DataDerivation:
 
         for row in csv.DictReader(
@@ -473,6 +477,8 @@ def create_update_sources(data, db_alias):
 
     logging.info('Processing %d sources' % len(data))
 
+    from usda_mongo.models import Source
+
     with switch_db(Source, db_alias) as Source:
 
         for row in csv.DictReader(
@@ -507,71 +513,75 @@ def create_update_nutrient_data(data, db_alias):
 
     logging.info('Processing %d nutrient data items' % len(data))
 
+    from usda_mongo.models import NutrientData, Nutrient, Food, DataDerivation, Source
+
     with switch_db(NutrientData, db_alias) as NutrientData:
         with switch_db(Nutrient, db_alias) as Nutrient:
             with switch_db(Food, db_alias) as Food:
+                with switch_db(DataDerivation, db_alias) as DataDerivation:
+                    with switch_db(Source, db_alias) as Source:
 
-                for start in range(0, len(data), NUTRIENT_DATA_STEP):
-                    end = min(start + NUTRIENT_DATA_STEP, len(data))
+                        for start in range(0, len(data), NUTRIENT_DATA_STEP):
+                            end = min(start + NUTRIENT_DATA_STEP, len(data))
 
-                    for row in csv.DictReader(
-                        data[start:end], fieldnames=(
-                            'ndb_no', 'nutr_no', 'nutr_val', 'num_data_pts', 'std_error',
-                            'src_cd', 'deriv_cd', 'ref_ndb_no', 'add_nutr_mark', 'num_studies',
-                            'min', 'max', 'df', 'low_eb', 'up_eb', 'stat_cmt', 'cc'
-                        ),
-                        delimiter='^', quotechar='~'
-                    ):
-                        created = False
+                            for row in csv.DictReader(
+                                data[start:end], fieldnames=(
+                                    'ndb_no', 'nutr_no', 'nutr_val', 'num_data_pts', 'std_error',
+                                    'src_cd', 'deriv_cd', 'ref_ndb_no', 'add_nutr_mark', 'num_studies',
+                                    'min', 'max', 'df', 'low_eb', 'up_eb', 'stat_cmt', 'cc'
+                                ),
+                                delimiter='^', quotechar='~'
+                            ):
+                                created = False
 
-                        try:
-                            nutrient_data = NutrientData.objects.get(
-                                food=Food.objects.get(ndb_number=int(row['ndb_no'])),
-                                nutrient=Nutrient.objects.get(number=int(row['nutr_no']))
-                            )
-                            total_updated += 1
-                        except NutrientData.DoesNotExist:
-                            nutrient_data = NutrientData(
-                                food=Food.objects.get(ndb_number=int(row['ndb_no'])),
-                                nutrient=Nutrient.objects.get(number=int(row['nutr_no']))
-                            )
-                            total_created += 1
-                            created = True
+                                try:
+                                    nutrient_data = NutrientData.objects.get(
+                                        food=Food.objects.get(ndb_number=int(row['ndb_no'])),
+                                        nutrient=Nutrient.objects.get(number=int(row['nutr_no']))
+                                    )
+                                    total_updated += 1
+                                except NutrientData.DoesNotExist:
+                                    nutrient_data = NutrientData(
+                                        food=Food.objects.get(ndb_number=int(row['ndb_no'])),
+                                        nutrient=Nutrient.objects.get(number=int(row['nutr_no']))
+                                    )
+                                    total_created += 1
+                                    created = True
 
-                        nutrient_data.nutrient_value = float(row['nutr_val'])
-                        nutrient_data.data_points = int(row['num_data_pts'])
-                        if row.get('std_error'):
-                            nutrient_data.standard_error = float(row['std_error'])
-                        if row.get('deriv_cd'):
-                            nutrient_data.data_derivation = DataDerivation.objects.get(code=row['deriv_cd'])
-                        if row.get('ref_ndb_no'):
-                            nutrient_data.reference_nbd_number = int(row['ref_ndb_no'])
-                        if row.get('add_nutr_mark'):
-                            nutrient_data.added_nutrient = row['add_nutr_mark'] == 'Y'
-                        if row.get('num_studies'):
-                            nutrient_data.number_of_studies = int(row['num_studies'])
-                        if row.get('min'):
-                            nutrient_data.minimum = float(row['min'])
-                        if row.get('max'):
-                            nutrient_data.maximum = float(row['max'])
-                        if row.get('df'):
-                            nutrient_data.degrees_of_freedom = int(row['df'])
-                        if row.get('low_eb'):
-                            nutrient_data.lower_error_bound = float(row['low_eb'])
-                        if row.get('up_eb'):
-                            nutrient_data.upper_error_bound = float(row['up_eb'])
-                        nutrient_data.statistical_comments = row.get('stat_cmt')
-                        nutrient_data.confidence_code = row.get('cc')
-                        nutrient_data.save()
+                                nutrient_data.nutrient_value = float(row['nutr_val'])
+                                nutrient_data.data_points = int(row['num_data_pts'])
+                                if row.get('std_error'):
+                                    nutrient_data.standard_error = float(row['std_error'])
+                                if row.get('deriv_cd'):
+                                    nutrient_data.data_derivation = DataDerivation.objects.get(code=row['deriv_cd'])
+                                if row.get('ref_ndb_no'):
+                                    nutrient_data.reference_nbd_number = int(row['ref_ndb_no'])
+                                if row.get('add_nutr_mark'):
+                                    nutrient_data.added_nutrient = row['add_nutr_mark'] == 'Y'
+                                if row.get('num_studies'):
+                                    nutrient_data.number_of_studies = int(row['num_studies'])
+                                if row.get('min'):
+                                    nutrient_data.minimum = float(row['min'])
+                                if row.get('max'):
+                                    nutrient_data.maximum = float(row['max'])
+                                if row.get('df'):
+                                    nutrient_data.degrees_of_freedom = int(row['df'])
+                                if row.get('low_eb'):
+                                    nutrient_data.lower_error_bound = float(row['low_eb'])
+                                if row.get('up_eb'):
+                                    nutrient_data.upper_error_bound = float(row['up_eb'])
+                                nutrient_data.statistical_comments = row.get('stat_cmt')
+                                nutrient_data.confidence_code = row.get('cc')
+                                nutrient_data.save()
 
-                        if row.get('src_cd'):
-                            nutrient_data.source.append(Source.objects.get(code=row['src_cd']))
-                            nutrient_data.save()
+                                if row.get('src_cd'):
+                                    nutrient_data.source.append(Source.objects.get(code=row['src_cd']))
+                                    nutrient_data.save()
 
-                        if created:
-                            logging.debug('Created %s' % nutrient_data)
-                        else:
-                            logging.debug('Updated %s' % nutrient_data)
+                                if created:
+                                    logging.debug('Created %s' % nutrient_data)
+                                else:
+                                    logging.debug('Updated %s' % nutrient_data)
 
         #reset_queries() # Reset DB connection to avoid using all available RAM
 
