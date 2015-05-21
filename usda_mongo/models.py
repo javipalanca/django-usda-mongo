@@ -90,7 +90,7 @@ class NutrientData(Document):
     lower_error_bound = FloatField(verbose_name='Lower Error Bound.', null=True, help_text='Lower 95% error bound.')
     upper_error_bound = FloatField(verbose_name='Upper Error Bound.', null=True, help_text='Upper 95% error bound.')
     statistical_comments = StringField(verbose_name='Statistical Comments', max_length=10, help_text='Statistical comments.')
-    confidence_code = StringField(verbose_name='Confidence Code', max_length=1, help_text='Confidence Code indicating data quality, based on evaluation of sample plan, sample handling, analytical method, analytical quality control, and number of samples analyzed. Not included in this release, but is planned for future releases.')
+    confidence_code = StringField(verbose_name='Confidence Code', max_length=10, help_text='Confidence Code indicating data quality, based on evaluation of sample plan, sample handling, analytical method, analytical quality control, and number of samples analyzed. Not included in this release, but is planned for future releases.')
 
     class Meta:
         verbose_name = 'Nutrient Data'
@@ -135,7 +135,7 @@ class Weight(Document):
     food = ReferenceField('Food', verbose_name='Food')
     sequence = IntField(verbose_name='Sequence', help_text='Sequence number.')
     amount = FloatField(verbose_name='Amount', help_text='Unit modifier (for example, 1 in "1 cup").')
-    description = StringField(verbose_name='Description', max_length=80, help_text='Description (for example, cup, diced, and 1-inch pieces).')
+    description = StringField(verbose_name='Description', max_length=280, help_text='Description (for example, cup, diced, and 1-inch pieces).')
     gram_weight = FloatField(verbose_name='Gram Weight', help_text='Gram weight.')
     number_of_data_points = FloatField(verbose_name='Number of Data Points', null=True, help_text='Number of data points.')
     standard_deviation = FloatField(verbose_name='Standard Deviation', null=True, help_text='Standard Deviation')

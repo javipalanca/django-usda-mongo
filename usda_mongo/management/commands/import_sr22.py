@@ -105,7 +105,7 @@ class Command(BaseCommand):
             create_update_foods(''.join([byte for byte in zip_file.read(FOOD_DES)]).splitlines(), encoding, db_alias)
         if parse_all or parse_weight:
             logging.info('Reading %s...' % WEIGHT)
-            create_update_weights(''.join([byte for byte in zip_file.read(WEIGHT)]).splitlines(), db_alias)
+            create_update_weights(''.join([byte for byte in zip_file.read(WEIGHT)]).splitlines(), encoding, db_alias)
         if parse_all or parse_nutrient:
             logging.info('Reading %s...' % NUTR_DEF)
             create_update_nutrients(''.join([byte for byte in zip_file.read(NUTR_DEF)]).splitlines(), encoding, db_alias)
@@ -227,7 +227,7 @@ def create_update_foods(data, encoding, db_alias):
     logging.info('Updated %d foods' % total_updated)
 
 
-def create_update_weights(data, db_alias):
+def create_update_weights(data, encoding, db_alias):
     total_created = 0
     total_updated = 0
 
@@ -238,11 +238,12 @@ def create_update_weights(data, db_alias):
     with switch_db(Weight, db_alias) as Weight:
         with switch_db(Food, db_alias) as Food:
 
-            for row in csv.DictReader(
+            for row in UnicodeDictReader(
                 data, fieldnames=(
                     'ndb_no', 'seq', 'amount', 'msre_desc', 'gm_wgt', 'num_data_pts', 'std_dev'
                 ),
-                delimiter='^', quotechar='~'
+                delimiter='^', quotechar='~',
+                encoding=encoding
             ):
                 created = False
 
